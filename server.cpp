@@ -4,24 +4,12 @@
 #define PORT ip_port.second
 
 int main(int argc, char const *argv[]) {
-// ig useless :)
-    // got ip:port 
     if (argc <= 1) {
         std::cerr << "Usage: ./server \"port\"" << std::endl;
         return 1;
     }
-    // std::pair<std::string, std::string> ip_port;
-    // regex 0-255.0-255.0-255.0-255:0-65535
-    // const std::regex ip_port_pattern("\\b((?:[0-9][0-9]?[0-9]?|255))\\b.\\b((?:[0-9][0-9]?[0-9]?|255))\\b.\\b((?:[0-9][0-9]?[0-9]?|255))\\b.\\b((?:[0-9][0-9]?[0-9]?|255))\\b:\\b((?:[0-9][0-9]?[0-9]?[0-9]?[0-9]?|65535))\\b");
     unsigned short int port;
     try {
-        // std::stringstream ss(argv[1]);
-        // if (!std::regex_match( ss.str(), ip_port_pattern )) { throw std::runtime_error("Wrong IP format"); }
-        // std::string temp;
-        // std::getline(ss, temp, ':'); 
-        // IP = temp;
-        // std::getline(ss, temp, ':');
-        // PORT = temp;
         port = std::stoi(argv[1]); 
         if (port < 0 || port > 65535) { throw std::runtime_error("Wrong port format"); }
     } catch (...) { 
