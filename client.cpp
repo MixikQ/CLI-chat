@@ -2,6 +2,31 @@
 
 #define IP ip_port.first
 #define PORT ip_port.second
+#define MAX_MSG_LEN 1024
+
+void recv_msg(int sockfd) {
+    while (true) {
+        char buffer[MAX_MSG_LEN] = {};
+        int buffer_len = sizeof(buffer), bytes_recieved;
+        if(bytes_recieved = recv(sockfd, buffer, buffer_len, 0) == -1) {
+            perror("recv");
+            continue;
+        }
+        std::cout << buffer << std::endl;
+    }   
+}
+
+void send_msg(int sockfd) {
+    while (true) {    
+        std::string msg;
+        std::getline(std::cin, msg);
+        int msg_len = strlen(msg.c_str()), bytes_sent;
+        if(bytes_sent = send(sockfd, msg.c_str(), msg_len, 0) == -1) {
+            perror("send");
+            continue;
+        }
+    }
+}
 
 int main(int argc, char const *argv[])
 {
@@ -47,23 +72,29 @@ int main(int argc, char const *argv[])
         return 1;
     }
 
-    char buffer[1024];
-    int buffer_len = sizeof(buffer), bytes_recieved;
-    if(bytes_recieved = recv(sockfd, buffer, buffer_len, 0) == -1) {
-        perror("recv");
-        return 1;
-    }
-    std::cout << buffer << std::endl;
+    // char buffer[MAX_MSG_LEN];
+    // int buffer_len = sizeof(buffer), bytes_recieved;
+    // if(bytes_recieved = recv(sockfd, buffer, buffer_len, 0) == -1) {
+    //     perror("recv");
+    //     return 1;
+    // }
+    // std::cout << buffer << std::endl;
 
-    while (true) {
-        std::string msg;
-        std::getline(std::cin, msg);
-        int msg_len = strlen(msg.c_str()), bytes_sent;
-        if(bytes_sent = send(sockfd, msg.c_str(), msg_len, 0) == -1) {
-            perror("send");
-            return 1;
-        }
-    }
+    // while (true) {
+    //     std::string msg;
+    //     std::getline(std::cin, msg);
+    //     int msg_len = strlen(msg.c_str()), bytes_sent;
+    //     if(bytes_sent = send(sockfd, msg.c_str(), msg_len, 0) == -1) {
+    //         perror("send");
+    //         return 1;
+    //     }
+    // }
+
+    std::thread recieving(recv_msg, sockfd);
+    std::thread sending(send_msg, sockfd);
+
+    recieving.join();
+    sending.join();
 
     return 0;
 }

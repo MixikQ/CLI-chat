@@ -2,6 +2,7 @@
 #include "IPfuncs.h"
 
 #define BACKLOG 10
+#define MAX_MSG_LEN 1024
 
 int main(int argc, char const *argv[]) {
 
@@ -18,72 +19,101 @@ int main(int argc, char const *argv[]) {
         return 1;
     }
     
-    int sockfd;
-    struct addrinfo hints, *res;
+    int listener;
+    struct addrinfo hints, *ai;
 
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_NUMERICHOST;
 
-    getaddrinfo(getIP().c_str(), argv[1], &hints, &res);
+    getaddrinfo(getIP().c_str(), argv[1], &hints, &ai);
 
-    sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    listener = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
 
-    if (sockfd == -1) {
+    if (listener == -1) {
         perror("socket");
         return 1;   
     }
 
     int yes = 1;
-    if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
+    if(setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
         perror("setsockopt");
         return 1;
     }
 
-    if (bind(sockfd, res->ai_addr, res->ai_addrlen) == -1) {
+    if (bind(listener, ai->ai_addr, ai->ai_addrlen) == -1) {
         perror("bind");
         return 1;
     }
 
-    freeaddrinfo(res);
+    freeaddrinfo(ai);
 
-    if (listen(sockfd, BACKLOG) == -1) {
+    fd_set master, read_fds;
+    int fdmax;
+    FD_ZERO(&master);
+    FD_ZERO(&read_fds);
+
+    if (listen(listener, BACKLOG) == -1) {
         perror("listen");
         return 1;
     }
 
+    FD_SET(listener, &master);
+    fdmax = listener;
+
     struct sockaddr_storage their_addr;
-    int new_fd;
+    int new_fd, recv_bytes;
+    struct sockaddr_storage remoteaddr;
+    socklen_t addrlen;
+    
 
     while (true) {
-        socklen_t addr_size = sizeof(their_addr);
-
-        new_fd = accept(sockfd, (struct sockaddr *) &their_addr, &addr_size);
-        if (new_fd == -1) {
-            perror("accept");
-            continue;
-        } 
-
-        char msg[] = "Connected to server";
-        int len = sizeof(msg), bytes_sent;
-        if (bytes_sent = send(new_fd, msg, 20, 0) == -1) {
-            perror("send");
+        read_fds = master;
+        if (select(fdmax + 1, &read_fds, NULL, NULL, NULL) == -1) {
+            perror("select");
             return 1;
         }
-        while (true) {
-            char buffer[1024] = {};
-            int buffer_len = sizeof(buffer), bytes_recieved;
-            if (bytes_recieved = recv(new_fd, buffer, buffer_len, 0) <= 0) {
-                perror("recv");
-                break;
-            }
-            std::cout << buffer << std::endl;
 
-            if (!fork()) {
-                close(sockfd);
-                close(new_fd);
-                return 0;
+        for (int i = 0; i <= fdmax; i++) {
+            if (FD_ISSET(i, &read_fds)) {
+                if (i == listener) {
+                    addrlen = sizeof(remoteaddr);
+                    new_fd = accept(listener, (struct sockaddr *) &remoteaddr, &addrlen);
+                    if (new_fd == -1) {
+                        perror("accept");
+                    } else {
+                        FD_SET(new_fd, &master);
+                        fdmax = (fdmax >= new_fd) ? fdmax : new_fd;
+                        if (send(new_fd, "Connected to server", sizeof("Connected to server"), 0) == -1) {
+                            perror("send");
+                        }
+                    }
+                } else {
+                    char buffer[MAX_MSG_LEN] = {};
+                    recv_bytes = recv(i, buffer, sizeof(buffer), 0);
+                    if (recv_bytes <= 0) {
+                        if (recv_bytes == 0) {
+                            std::cerr << "Conncetion closed by client" << std::endl;
+                        } else {
+                            perror("recv");
+                        }
+                        close(i);
+                        FD_CLR(i, &master);
+                    } else {
+                        strcpy(buffer, ("Client " + std::to_string(i) + ": " + std::string(buffer)).c_str());
+                        std::cout << buffer << std::endl;
+                        for (int j = 0; j <= fdmax; j++) {
+                            if (FD_ISSET(j, &master)) {
+                                if (j != listener && j != i) {
+                                    if (send(j, buffer, sizeof(buffer), 0) == -1) {
+                                        perror("send");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } 
             }
         }
     }
