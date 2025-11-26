@@ -1,33 +1,122 @@
-#include <iostream>
-#include <string>
-#include <sstream>
-#include <algorithm>
-#include <stdexcept>
-#include <regex>
+#include "includes.h"
+#include "IPfuncs.h"
 
-#define IP ip_port.first
-#define PORT ip_port.second
+#define BACKLOG 10
+#define MAX_MSG_LEN 1024
 
-int main(int argc, char const *argv[])
-{
+int main(int argc, char const *argv[]) {
+
     if (argc <= 1) {
-        std::cerr << "Usage: ./server \"ip:port\"" << std::endl;
+        std::cerr << "Usage: ./server \"port\"" << std::endl;
         return 1;
     }
-    std::pair<std::string, std::string> ip_port;
-    // regex 0-255.0-255.0-255.0-255:0-65535
-    const std::regex ip_port_pattern("\\b((?:[0-9][0-9]?[0-9]?|255))\\b.\\b((?:[0-9][0-9]?[0-9]?|255))\\b.\\b((?:[0-9][0-9]?[0-9]?|255))\\b.\\b((?:[0-9][0-9]?[0-9]?|255))\\b:\\b((?:[0-9][0-9]?[0-9]?[0-9]?[0-9]?|65535))\\b");
+    unsigned short int port;
     try {
-        std::stringstream ss(argv[1]);
-        if (!std::regex_match( ss.str(), ip_port_pattern )) { throw std::runtime_error("Wrong IP format"); }
-        std::string temp;
-        std::getline(ss, temp, ':'); 
-        IP = temp;
-        std::getline(ss, temp, ':');
-        PORT = temp;
+        port = std::stoi(argv[1]); 
+        if (port < 0 || port > 65535) { throw std::runtime_error("Wrong port format"); }
     } catch (...) { 
-        std::cerr << "Something went wrong, check ip:port typed correctly" << std::endl;
+        std::cerr << "Something went wrong, check port typed correctly" << std::endl;
         return 1;
     }
+    
+    int listener;
+    struct addrinfo hints, *ai;
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_NUMERICHOST;
+
+    getaddrinfo(getIP().c_str(), argv[1], &hints, &ai);
+
+    listener = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+
+    if (listener == -1) {
+        perror("socket");
+        return 1;   
+    }
+
+    int yes = 1;
+    if(setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
+        perror("setsockopt");
+        return 1;
+    }
+
+    if (bind(listener, ai->ai_addr, ai->ai_addrlen) == -1) {
+        perror("bind");
+        return 1;
+    }
+
+    freeaddrinfo(ai);
+
+    fd_set master, read_fds;
+    int fdmax;
+    FD_ZERO(&master);
+    FD_ZERO(&read_fds);
+
+    if (listen(listener, BACKLOG) == -1) {
+        perror("listen");
+        return 1;
+    }
+
+    FD_SET(listener, &master);
+    fdmax = listener;
+
+    struct sockaddr_storage their_addr;
+    int new_fd, recv_bytes;
+    struct sockaddr_storage remoteaddr;
+    socklen_t addrlen;
+    
+
+    while (true) {
+        read_fds = master;
+        if (select(fdmax + 1, &read_fds, NULL, NULL, NULL) == -1) {
+            perror("select");
+            return 1;
+        }
+
+        for (int i = 0; i <= fdmax; i++) {
+            if (FD_ISSET(i, &read_fds)) {
+                if (i == listener) {
+                    addrlen = sizeof(remoteaddr);
+                    new_fd = accept(listener, (struct sockaddr *) &remoteaddr, &addrlen);
+                    if (new_fd == -1) {
+                        perror("accept");
+                    } else {
+                        FD_SET(new_fd, &master);
+                        fdmax = (fdmax >= new_fd) ? fdmax : new_fd;
+                        if (send(new_fd, "Connected to server", sizeof("Connected to server"), 0) == -1) {
+                            perror("send");
+                        }
+                    }
+                } else {
+                    char buffer[MAX_MSG_LEN] = {};
+                    recv_bytes = recv(i, buffer, sizeof(buffer), 0);
+                    if (recv_bytes <= 0) {
+                        if (recv_bytes == 0) {
+                            std::cerr << "Conncetion closed by client" << std::endl;
+                        } else {
+                            perror("recv");
+                        }
+                        close(i);
+                        FD_CLR(i, &master);
+                    } else {
+                        strcpy(buffer, ("Client " + std::to_string(i) + ": " + std::string(buffer)).c_str());
+                        std::cout << buffer << std::endl;
+                        for (int j = 0; j <= fdmax; j++) {
+                            if (FD_ISSET(j, &master)) {
+                                if (j != listener && j != i) {
+                                    if (send(j, buffer, sizeof(buffer), 0) == -1) {
+                                        perror("send");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } 
+            }
+        }
+    }
+
     return 0;
 }
