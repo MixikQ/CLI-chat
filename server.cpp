@@ -4,6 +4,17 @@
 #define BACKLOG 10
 #define MAX_MSG_LEN 1024
 
+void quit(int sockfd) {
+    while (true) {    
+        std::string msg;
+        std::getline(std::cin, msg);
+        if (msg == "~quit" || msg == "~exit") {
+            close(sockfd);
+            exit(0);
+        }
+    }
+}
+
 int main(int argc, char const *argv[]) {
 
     if (argc <= 1) {
@@ -49,6 +60,8 @@ int main(int argc, char const *argv[]) {
 
     freeaddrinfo(ai);
 
+    std::thread wait_for_input(quit, listener);
+
     fd_set master, read_fds;
     int fdmax;
     FD_ZERO(&master);
@@ -66,7 +79,8 @@ int main(int argc, char const *argv[]) {
     int new_fd, recv_bytes;
     struct sockaddr_storage remoteaddr;
     socklen_t addrlen;
-    
+    std::unordered_map<int, std::string> usernames;
+    std::vector<std::string> history;
 
     while (true) {
         read_fds = master;
@@ -85,8 +99,11 @@ int main(int argc, char const *argv[]) {
                     } else {
                         FD_SET(new_fd, &master);
                         fdmax = (fdmax >= new_fd) ? fdmax : new_fd;
-                        if (send(new_fd, "Connected to server", sizeof("Connected to server"), 0) == -1) {
-                            perror("send");
+                        for (int u = 0; u < 5; u++) {
+                            if (send(new_fd, "Connected to server\nType your nickname:", sizeof("Connected to server\nType your nickname:"), 0) == -1) {
+                                perror("send");
+                            }
+                            sleep(1);
                         }
                     }
                 } else {
@@ -100,14 +117,19 @@ int main(int argc, char const *argv[]) {
                         }
                         close(i);
                         FD_CLR(i, &master);
+                        usernames.erase(i);
                     } else {
-                        strcpy(buffer, ("Client " + std::to_string(i) + ": " + std::string(buffer)).c_str());
-                        std::cout << buffer << std::endl;
-                        for (int j = 0; j <= fdmax; j++) {
-                            if (FD_ISSET(j, &master)) {
-                                if (j != listener && j != i) {
-                                    if (send(j, buffer, sizeof(buffer), 0) == -1) {
-                                        perror("send");
+                        if (usernames.find(i) == usernames.end()) {
+                            usernames[i] = buffer;
+                        } else {
+                            strcpy(buffer, (usernames[i] + ": " + std::string(buffer)).c_str());
+                            std::cout << buffer << std::endl;
+                            for (int j = 0; j <= fdmax; j++) {
+                                if (FD_ISSET(j, &master)) {
+                                    if (j != listener && j != i) {
+                                        if (send(j, buffer, sizeof(buffer), 0) == -1) {
+                                            perror("send");
+                                        }
                                     }
                                 }
                             }
@@ -117,6 +139,6 @@ int main(int argc, char const *argv[]) {
             }
         }
     }
-
+    wait_for_input.join();
     return 0;
 }
