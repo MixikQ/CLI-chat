@@ -36,7 +36,7 @@ int main(int argc, char const *argv[])
 {
     // got ip:port 
     if (argc <= 1) {
-        std::cerr << "Usage: ./server \"port\"" << std::endl;
+        std::cerr << "Usage: ./client \"ip:port\"" << std::endl;
         return 1;
     }
     std::pair<std::string, std::string> ip_port;
