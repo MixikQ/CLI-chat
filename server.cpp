@@ -99,11 +99,8 @@ int main(int argc, char const *argv[]) {
                     } else {
                         FD_SET(new_fd, &master);
                         fdmax = (fdmax >= new_fd) ? fdmax : new_fd;
-                        for (int u = 0; u < 5; u++) {
-                            if (send(new_fd, "Connected to server\nType your nickname:", sizeof("Connected to server\nType your nickname:"), 0) == -1) {
-                                perror("send");
-                            }
-                            sleep(1);
+                        if (send(new_fd, "Connected to server\nType your nickname:", sizeof("Connected to server\nType your nickname:"), 0) == -1) {
+                            perror("send");
                         }
                     }
                 } else {
