@@ -3,6 +3,19 @@
 
 #define BACKLOG 10
 #define MAX_MSG_LEN 1024
+#define FILE "history.txt"
+
+std::ofstream output_file;
+std::vector<std::string> history;
+
+void write_to_file() {
+    output_file.open(FILE);
+    output_file.clear();
+    for (std::string iter : history) {
+        output_file << iter << std::endl;
+    }
+    output_file.close();
+}
 
 void quit(int sockfd) {
     while (true) {    
@@ -10,6 +23,7 @@ void quit(int sockfd) {
         std::getline(std::cin, msg);
         if (msg == "~quit" || msg == "~exit") {
             close(sockfd);
+            write_to_file();
             exit(0);
         }
     }
@@ -60,6 +74,18 @@ int main(int argc, char const *argv[]) {
 
     freeaddrinfo(ai);
 
+
+    std::ifstream input_file;
+    input_file.open(FILE);
+    std::string line;
+    if (input_file.is_open()) {
+        while(std::getline(input_file, line)) {
+            history.push_back(line);
+            std::cout << line << std::endl;
+        }
+        input_file.close();
+    }
+
     std::thread wait_for_input(quit, listener);
 
     fd_set master, read_fds;
@@ -80,7 +106,6 @@ int main(int argc, char const *argv[]) {
     struct sockaddr_storage remoteaddr;
     socklen_t addrlen;
     std::unordered_map<int, std::string> usernames;
-    std::vector<std::string> history;
 
     while (true) {
         read_fds = master;
@@ -99,7 +124,14 @@ int main(int argc, char const *argv[]) {
                     } else {
                         FD_SET(new_fd, &master);
                         fdmax = (fdmax >= new_fd) ? fdmax : new_fd;
-                        if (send(new_fd, "Connected to server\nType your nickname:", sizeof("Connected to server\nType your nickname:"), 0) == -1) {
+                        for (std::string iter : history) {
+                            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                            if (send(new_fd, iter.c_str(), sizeof(iter.c_str()), 0) == -1) {
+                                perror("send");
+                            }
+                        }
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                        if (send(new_fd, "Connected to server | Type your nickname:", sizeof("Connected to server | Type your nickname:"), 0) == -1) {
                             perror("send");
                         }
                     }
@@ -108,7 +140,7 @@ int main(int argc, char const *argv[]) {
                     recv_bytes = recv(i, buffer, sizeof(buffer), 0);
                     if (recv_bytes <= 0) {
                         if (recv_bytes == 0) {
-                            std::cerr << "Conncetion closed by client" << std::endl;
+                            std::cerr << usernames[i] << " left" << std::endl;
                         } else {
                             perror("recv");
                         }
@@ -121,6 +153,10 @@ int main(int argc, char const *argv[]) {
                         } else {
                             strcpy(buffer, (usernames[i] + ": " + std::string(buffer)).c_str());
                             std::cout << buffer << std::endl;
+                            if (history.size() >= 20) {
+                                history.erase(history.begin());
+                            }
+                            history.push_back(buffer);
                             for (int j = 0; j <= fdmax; j++) {
                                 if (FD_ISSET(j, &master)) {
                                     if (j != listener && j != i) {
