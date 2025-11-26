@@ -20,6 +20,10 @@ void send_msg(int sockfd) {
     while (true) {    
         std::string msg;
         std::getline(std::cin, msg);
+        if (msg == "~quit" || msg == "~exit") {
+            close(sockfd);
+            exit(0);
+        }
         int msg_len = strlen(msg.c_str()), bytes_sent;
         if(bytes_sent = send(sockfd, msg.c_str(), msg_len, 0) == -1) {
             perror("send");
@@ -71,24 +75,6 @@ int main(int argc, char const *argv[])
         perror("connect");
         return 1;
     }
-
-    // char buffer[MAX_MSG_LEN];
-    // int buffer_len = sizeof(buffer), bytes_recieved;
-    // if(bytes_recieved = recv(sockfd, buffer, buffer_len, 0) == -1) {
-    //     perror("recv");
-    //     return 1;
-    // }
-    // std::cout << buffer << std::endl;
-
-    // while (true) {
-    //     std::string msg;
-    //     std::getline(std::cin, msg);
-    //     int msg_len = strlen(msg.c_str()), bytes_sent;
-    //     if(bytes_sent = send(sockfd, msg.c_str(), msg_len, 0) == -1) {
-    //         perror("send");
-    //         return 1;
-    //     }
-    // }
 
     std::thread recieving(recv_msg, sockfd);
     std::thread sending(send_msg, sockfd);
