@@ -10,7 +10,7 @@ int main(int argc, char const *argv[])
         std::cerr << "Usage: ./server \"port\"" << std::endl;
         return 1;
     }
-    std::pair<std::string, unsigned short int> ip_port;
+    std::pair<std::string, std::string> ip_port;
     // regex 0-255.0-255.0-255.0-255:0-65535
     const std::regex ip_port_pattern("\\b((?:[0-9][0-9]?[0-9]?|255))\\b.\\b((?:[0-9][0-9]?[0-9]?|255))\\b.\\b((?:[0-9][0-9]?[0-9]?|255))\\b.\\b((?:[0-9][0-9]?[0-9]?|255))\\b:\\b((?:[0-9][0-9]?[0-9]?[0-9]?[0-9]?|65535))\\b");
     try {
@@ -19,32 +19,51 @@ int main(int argc, char const *argv[])
         std::string temp;
         std::getline(ss, ip_port.first, ':'); 
         std::getline(ss, temp, ':');
-        ip_port.second = std::stoi(temp);
+        ip_port.second = temp;
     } catch (...) { 
         std::cerr << "Something went wrong, check port typed correctly" << std::endl;
         return 1;
     }
+        
+    int sockfd;
+    struct addrinfo hints, *res;
 
-    int client = socket(AF_INET, SOCK_STREAM, 0);
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_NUMERICHOST;
 
-    sockaddr_in addr;
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(PORT);
-    addr.sin_addr.s_addr = inet_addr(IP.c_str());
+    getaddrinfo(IP.c_str(), PORT.c_str(), &hints, &res);
 
-    if (connect(client, (sockaddr *) &addr, sizeof(addr)) < 0) {
-        std::cerr << "Error during connection" << std::endl;
-        close(client);
+    sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+
+    if (sockfd == -1) {
+        perror("socket");
+        return 1;   
+    }
+
+    if (connect(sockfd, res->ai_addr, res->ai_addrlen) == -1) {
+        perror("connect");
         return 1;
     }
 
-    char msg[] = "hello there!";
-    if (send(client, &msg, sizeof(msg), 0) == -1) {
-        std::cerr << "Error during sending" << std::endl;
-        close(client);
+    char buffer[1024];
+    int buffer_len = sizeof(buffer), bytes_recieved;
+    if(bytes_recieved = recv(sockfd, buffer, buffer_len, 0) == -1) {
+        perror("recv");
         return 1;
     }
+    std::cout << buffer << std::endl;
 
-    close(client);
+    while (true) {
+        std::string msg;
+        std::getline(std::cin, msg);
+        int msg_len = strlen(msg.c_str()), bytes_sent;
+        if(bytes_sent = send(sockfd, msg.c_str(), msg_len, 0) == -1) {
+            perror("send");
+            return 1;
+        }
+    }
+
     return 0;
 }

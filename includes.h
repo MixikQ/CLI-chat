@@ -1,3 +1,5 @@
+#pragma once
+
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -9,3 +11,6 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <vector>
+#include <netdb.h>
+#include <cstring>

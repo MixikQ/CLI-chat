@@ -1,9 +1,10 @@
 #include "includes.h"
+#include "IPfuncs.h"
 
-#define IP ip_port.first
-#define PORT ip_port.second
+#define BACKLOG 10
 
 int main(int argc, char const *argv[]) {
+
     if (argc <= 1) {
         std::cerr << "Usage: ./server \"port\"" << std::endl;
         return 1;
@@ -16,50 +17,76 @@ int main(int argc, char const *argv[]) {
         std::cerr << "Something went wrong, check port typed correctly" << std::endl;
         return 1;
     }
+    
+    int sockfd;
+    struct addrinfo hints, *res;
 
-    // creating server and socket ???
-    int server = socket(AF_INET, SOCK_STREAM, 0);
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_NUMERICHOST;
 
-    struct sockaddr_in server_address;
-    server_address.sin_family = AF_INET;
-    server_address.sin_port = htons(port);
-    server_address.sin_addr.s_addr = htonl(INADDR_ANY);
+    getaddrinfo(getIP().c_str(), argv[1], &hints, &res);
 
-    if (bind(server, (struct sockaddr*) &server_address, sizeof(server_address)) < 0) {
-        std::cerr << "Error during socket binding" << std::endl;
+    sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+
+    if (sockfd == -1) {
+        perror("socket");
+        return 1;   
+    }
+
+    int yes = 1;
+    if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
+        perror("setsockopt");
         return 1;
     }
-    while (true)
-    {
-        if (listen(server, 100) == 0) {
-            std::cout << "Server is listening on port " << port << std::endl;
-            int client;
-            struct sockaddr_in client_addr;
-            socklen_t client_addr_len = sizeof(client_addr);
-            
-            if ((client = accept(server, (struct sockaddr*) &client_addr, &client_addr_len)) < 0) {
-                std::cerr << "Error during connecting to client" << std::endl;
-                close(server);
-                return -1;
-            }
 
-            char buffer[1024];
-            int bytes_read;
+    if (bind(sockfd, res->ai_addr, res->ai_addrlen) == -1) {
+        perror("bind");
+        return 1;
+    }
 
-            if ((bytes_read = recv(client, buffer, sizeof(buffer), MSG_PEEK)) == 0) {
-                std::cerr << "Nothing is sent" << std::endl;
-                return 1;
+    freeaddrinfo(res);
+
+    if (listen(sockfd, BACKLOG) == -1) {
+        perror("listen");
+        return 1;
+    }
+
+    struct sockaddr_storage their_addr;
+    int new_fd;
+
+    while (true) {
+        socklen_t addr_size = sizeof(their_addr);
+
+        new_fd = accept(sockfd, (struct sockaddr *) &their_addr, &addr_size);
+        if (new_fd == -1) {
+            perror("accept");
+            continue;
+        } 
+
+        char msg[] = "Connected to server";
+        int len = sizeof(msg), bytes_sent;
+        if (bytes_sent = send(new_fd, msg, 20, 0) == -1) {
+            perror("send");
+            return 1;
+        }
+        while (true) {
+            char buffer[1024] = {};
+            int buffer_len = sizeof(buffer), bytes_recieved;
+            if (bytes_recieved = recv(new_fd, buffer, buffer_len, 0) <= 0) {
+                perror("recv");
+                break;
             }
-            std::cout << "Recieved: " << bytes_read << " bytes" << std::endl;
             std::cout << buffer << std::endl;
-            // close(client);
-        } else {
-            close(server);
-            std::cerr << "Error during socket listening" << std::endl;
-            return 1; 
+
+            if (!fork()) {
+                close(sockfd);
+                close(new_fd);
+                return 0;
+            }
         }
     }
-    close(server);
-    
+
     return 0;
 }
