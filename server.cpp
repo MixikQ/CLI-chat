@@ -4,6 +4,7 @@
 #define BACKLOG 10
 #define MAX_MSG_LEN 1024
 #define FILE "history.txt"
+#define HISTORY_SIZE 20
 
 std::ofstream output_file;
 std::vector<std::string> history;
@@ -153,7 +154,7 @@ int main(int argc, char const *argv[]) {
                         } else {
                             strcpy(buffer, (usernames[i] + ": " + std::string(buffer)).c_str());
                             std::cout << buffer << std::endl;
-                            if (history.size() >= 20) {
+                            if (history.size() >= HISTORY_SIZE) {
                                 history.erase(history.begin());
                             }
                             history.push_back(buffer);
