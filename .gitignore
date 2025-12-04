@@ -1,5 +1,5 @@
 *.sh
 *.o
-*.txt
+history.txt
 /build
 /.vscode
